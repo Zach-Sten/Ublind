@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Ublind"
+version = "0.1.0"
+description = "Exploring high dimensional data with sound"
+readme = "README.md"
+requires-python = ">=3.10"
+
+authors=[
+{name = "Zachary Stensland" },
+]
+
+maintainers = [
+    {name = "Zachary Stensland", email = "zach.stensland@ucsf.edu" },
+]
+
+
+dependencies = [
+    "scanpy",
+    "anndata",
+    "matplotlib",
+    "midiutil",
+    "pretty_midi",
+    "seaborn",
+]
+
+[project.optional-dependencies]
+dev = ["black", "ruff", "pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
