@@ -41,6 +41,11 @@ import ublind as ub
 
 adata = sc.read_h5ad("my_data.h5ad")
 
+# Get details on instruments, scales, and quickstart:
+ub.hlp.instruments()
+ub.hlp.scales()
+ub.hlp.quickstart()
+
 # embedding → music
 ub.pp.preprocess(adata, embedding="X_umap", time=10, scale="pentatonic")
 
@@ -49,6 +54,9 @@ ub.tl.render(adata, "output.wav")
 
 # animated sweep with sound
 ub.pl.sweep(adata)
+
+# interactive display for embeddings:
+ub.pl.interactive(adata, color_by="cell_type", embedding = 'X_umap')
 ```
 
 ### Pick your instruments
