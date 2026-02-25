@@ -68,17 +68,6 @@ ub.pp.preprocess(
 
 `piano` · `cello` · `violin` · `flute` · `guitar` · `harp` · `trumpet` · `sax` · `clarinet` · `vibraphone` — or any General MIDI program number.
 
-## How it works
-
-```
-adata.obsm["X_umap"]          ub.pp.preprocess()         ub.tl.render()
-┌─────────────────┐          ┌──────────────────┐       ┌─────────────┐
-│ dim 0 → time    │          │                  │       │             │
-│ dim 1 → piano   │────────▶ │  NoteEvents      │─────▶ │  .wav/.mid  │
-│ dim 2 → cello   │          │  [t, pitch, vel]  │       │             │
-└─────────────────┘          └──────────────────┘       └─────────────┘
-```
-
 ## Author
 
 Zachary Stensland — UCSF
