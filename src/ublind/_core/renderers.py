@@ -169,6 +169,20 @@ class SynthRenderer:
 
         _write_wav(output, buf.astype(np.float32), sr)
 
+    def render_bytes(
+        self,
+        events: Sequence[NoteEvent],
+        total_time: float,
+        tempo_bpm: float = 120.0,
+    ) -> bytes:
+        """Render to WAV and return bytes (for spatial sweep re-rendering)."""
+        import tempfile
+        tmp = Path(tempfile.mktemp(suffix=".wav"))
+        self.render(events, tmp, tempo_bpm=tempo_bpm)
+        data = tmp.read_bytes()
+        tmp.unlink(missing_ok=True)
+        return data
+
     def _synth_note(
         self,
         freq: float,
