@@ -15,11 +15,15 @@ Requires Python ≥ 3.10 and ffmpeg for animated visualizations.
 
 ```bash
 # ffmpeg (needed for sweep animations)
+conda create -n ublind python=3.10
+conda activate ublind
 conda install -c conda-forge ffmpeg
 
 # install ublind
-cd ublind
-pip install -e .
+pip install git+https://github.com/Zach-Sten/Ublind.git
+
+# launch jupyter
+jupyter lab
 ```
 
 For realistic instrument sounds via SoundFont rendering (optional):
