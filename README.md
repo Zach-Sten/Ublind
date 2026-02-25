@@ -4,7 +4,7 @@
 
 Ublind turns single-cell embeddings into music. Pick an embedding — UMAP, PCA, t-SNE, whatever, and ublind maps it to sound. The first dimension becomes **time**, the rest become **pitch**, each on its own instrument. Clusters become chords, trajectories become melodies, outliers become surprises.
 
-Built for AnnData. Sometimes you can *hear* structure in data that you can't see. 
+Built for AnnData. *Hear* structure in data that you can't see. 
 
 > ⚠️ **Beta** — early development, expect rough edges. Feedback welcome.
 
