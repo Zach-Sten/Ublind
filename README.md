@@ -2,13 +2,15 @@
 
 **What does your data sound like?**
 
-Ublind turns single-cell embeddings into music. Pick an embedding — UMAP, PCA, t-SNE, whatever, and ublind maps it to sound. The first dimension becomes **time**, the rest become **pitch**, each on its own instrument. Clusters become chords, trajectories become melodies, outliers become surprises.
+Ublind turns high and low dimensional embeddings into sound. Pick an embedding — UMAP, PCA, t-SNE, whatever, and ublind maps it to sound. 
 
-Built for AnnData. *Hear* structure in data that you can't see. 
+Clusters become chords, trajectories become melodies, visuals become audible. 
+
+Built for AnnData and is modeled off scverse. *Hear* structure in data that you can't see. 
 
 > ⚠️ **Beta** — early development, expect rough edges. Feedback welcome.
 
-
+---
 ## Install
 
 Requires Python ≥ 3.10 and ffmpeg for animated visualizations.
