@@ -1,5 +1,9 @@
 """
 Preprocessing: embedding → NoteEvents stored in adata.uns['ublind'].
+
+Every dimension of the embedding becomes its own voice/instrument.
+Each dimension independently sweeps through time (sorted by that
+dimension's values) and maps its values to pitch.
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ def preprocess(
     embedding: str = "X_umap",
     time: float = 10.0,
     dim_inst_map: Optional[dict[int, str | int]] = None,
-    time_dim: int = 0,
+    counterpoint: bool = True,
     scale: Optional[str] = None,
     root: int = 0,
     velocity: int = 90,
@@ -34,9 +38,14 @@ def preprocess(
     """
     Preprocess an embedding for sonification.
 
-    Extracts an embedding from ``adata.obsm[embedding]``, maps one
-    dimension to time and the remaining dimensions to instrument
-    voices, then stores the result in ``adata.uns['ublind']``.
+    Every dimension of the embedding becomes a separate voice/instrument.
+    Each dimension sweeps through time independently — sorted by that
+    dimension's values — so no axis of variation is lost.
+
+    For a 2D UMAP with piano + cello:
+    - Piano sweeps left → right (sorted by dim 0)
+    - Cello sweeps bottom → top (sorted by dim 1)
+    - You hear both axes simultaneously
 
     Parameters
     ----------
@@ -47,12 +56,14 @@ def preprocess(
     time : float
         Total duration of the piece in seconds.
     dim_inst_map : dict, optional
-        Map dimension index (0-based, *after* removing the time dim)
-        to instrument name or GM program number.
-        Example: ``{0: "piano", 1: "cello", 2: "flute"}``
+        Map dimension index to instrument name or GM program number.
+        Example: ``{0: "piano", 1: "cello"}``
         Unmapped dimensions get pleasant defaults.
-    time_dim : int
-        Which column of the embedding to use as the time axis.
+    counterpoint : bool
+        If True (default), odd-numbered dimensions have their pitch
+        direction flipped — so while dim 0 sweeps low→high, dim 1
+        sweeps high→low. Creates musical counterpoint instead of
+        all voices rising together.
     scale : str, optional
         Quantise pitches to a scale (``"pentatonic"``, ``"major"``, etc.).
     root : int
@@ -68,7 +79,7 @@ def preprocess(
     seed : int
         Random seed for subsampling.
     """
-    _validate_inputs(adata, embedding, time_dim)
+    _validate_inputs(adata, embedding)
 
     coords = np.array(adata.obsm[embedding], dtype=float)
     n_points, n_dims = coords.shape
@@ -81,21 +92,7 @@ def preprocess(
         coords = coords[subsample_idx]
         n_points = len(coords)
 
-    # Split time vs value dimensions
-    raw_time = coords[:, time_dim]
-    value_cols = np.delete(coords, time_dim, axis=1)
-    n_voices = value_cols.shape[1]
-
-    # Sort by time
-    order = np.argsort(raw_time)
-    raw_time = raw_time[order]
-    value_cols = value_cols[order]
-    coords = coords[order]
-    if subsample_idx is not None:
-        subsample_idx = subsample_idx[order]
-
-    # Normalise time to [0, total_duration]
-    time_values = _normalize_time_axis(raw_time, time)
+    n_voices = n_dims
 
     # Note duration
     if note_duration is None:
@@ -104,28 +101,52 @@ def preprocess(
     # Resolve instruments per voice
     instruments_info = _resolve_instruments(n_voices, dim_inst_map)
 
-    # Map values to pitches
-    pitches = _compute_pitches(value_cols, n_voices, scale, root)
+    # Per-dimension: independent time + pitch
+    # Even dims: low → high pitch, Odd dims: high → low pitch
+    # This creates counterpoint instead of all dims rising together
+    time_per_dim = {}
+    pitches_per_dim = {}
+    order_per_dim = {}
 
-    # Build NoteEvents
+    for d in range(n_dims):
+        col = coords[:, d]
+        order = np.argsort(col)
+        order_per_dim[d] = order
+        time_per_dim[d] = _normalize_axis(col[order], time)
+
+        p = map_to_pitches(col[order], scale=scale, root=root)
+        # Flip pitch direction on odd dimensions if counterpoint is on
+        if counterpoint and d % 2 == 1:
+            p = (LOWEST_NOTE + HIGHEST_NOTE) - p
+            # Re-snap to scale after flipping
+            if scale is not None:
+                p = map_to_pitches(
+                    p.astype(float), lo=LOWEST_NOTE, hi=HIGHEST_NOTE,
+                    scale=scale, root=root,
+                )
+        pitches_per_dim[d] = p
+
+    # Build NoteEvents — each dim is its own voice
     events = _build_events(
-        time_values, pitches, instruments_info, note_duration, velocity,
+        time_per_dim, pitches_per_dim, order_per_dim,
+        instruments_info, note_duration, velocity, n_dims,
     )
 
     # Store in adata.uns
     adata.uns["ublind"] = {
         "events": events,
         "embedding": embedding,
-        "time_dim": time_dim,
         "time_sec": time,
         "tempo_bpm": tempo_bpm,
         "coords": coords,
-        "time_values": time_values,
-        "pitches": pitches,
+        "time_per_dim": time_per_dim,
+        "pitches_per_dim": pitches_per_dim,
+        "order_per_dim": order_per_dim,
         "instruments": instruments_info,
         "subsample_idx": subsample_idx,
         "scale": scale,
         "root": root,
+        "n_dims": n_dims,
     }
 
     inst_names = [info[2] for info in instruments_info]
@@ -139,7 +160,7 @@ def preprocess(
 # ── Private helpers ──────────────────────────────────────────────
 
 
-def _validate_inputs(adata, embedding: str, time_dim: int) -> None:
+def _validate_inputs(adata, embedding: str) -> None:
     """Check that the embedding exists and has enough dimensions."""
     if embedding not in adata.obsm:
         raise KeyError(
@@ -147,19 +168,17 @@ def _validate_inputs(adata, embedding: str, time_dim: int) -> None:
             f"Available: {list(adata.obsm.keys())}"
         )
     n_dims = adata.obsm[embedding].shape[1]
-    if n_dims < 2:
-        raise ValueError(f"Embedding must have ≥2 dims, got {n_dims}")
-    if time_dim < 0 or time_dim >= n_dims:
-        raise ValueError(f"time_dim={time_dim} out of range for {n_dims} dims")
+    if n_dims < 1:
+        raise ValueError(f"Embedding must have ≥1 dims, got {n_dims}")
 
 
-def _normalize_time_axis(raw_time: np.ndarray, total: float) -> np.ndarray:
-    """Rescale raw time values to [0, total]."""
-    t_min, t_max = raw_time.min(), raw_time.max()
-    t_span = t_max - t_min
-    if t_span == 0:
-        t_span = 1.0
-    return (raw_time - t_min) / t_span * total
+def _normalize_axis(sorted_values: np.ndarray, total: float) -> np.ndarray:
+    """Rescale sorted values to [0, total]."""
+    v_min, v_max = sorted_values.min(), sorted_values.max()
+    span = v_max - v_min
+    if span == 0:
+        span = 1.0
+    return (sorted_values - v_min) / span * total
 
 
 def _resolve_instruments(
@@ -179,44 +198,34 @@ def _resolve_instruments(
     return info
 
 
-def _compute_pitches(
-    value_cols: np.ndarray,
-    n_voices: int,
-    scale: str | None,
-    root: int,
-) -> np.ndarray:
-    """Map each voice column to MIDI pitches."""
-    pitches = np.zeros_like(value_cols, dtype=int)
-    for v in range(n_voices):
-        pitches[:, v] = map_to_pitches(value_cols[:, v], scale=scale, root=root)
-    return pitches
-
-
 def _build_events(
-    time_values: np.ndarray,
-    pitches: np.ndarray,
+    time_per_dim: dict,
+    pitches_per_dim: dict,
+    order_per_dim: dict,
     instruments_info: list[tuple[int, int, str]],
     note_duration: float,
     velocity: int,
+    n_dims: int,
 ) -> list[NoteEvent]:
-    """Convert arrays of times + pitches into a flat list of NoteEvents."""
-    n_points = len(time_values)
-    n_voices = pitches.shape[1]
+    """Build NoteEvents — each dimension sweeps independently."""
     events: list[NoteEvent] = []
 
-    for i in range(n_points):
-        t = float(time_values[i])
-        for v in range(n_voices):
-            p = int(pitches[i, v])
+    for d in range(n_dims):
+        times = time_per_dim[d]
+        pitches = pitches_per_dim[d]
+        _, prog, _ = instruments_info[d]
+
+        # Channel assignment (skip channel 9 = drums)
+        ch = d if d < 9 else d + 1
+        ch = ch % 16
+        if ch == 9:
+            ch = 10
+
+        for i in range(len(times)):
+            p = int(pitches[i])
             if LOWEST_NOTE <= p <= HIGHEST_NOTE:
-                _, prog, _ = instruments_info[v]
-                # Channel 9 is drums in GM — skip it
-                ch = v if v < 9 else v + 1
-                ch = ch % 16
-                if ch == 9:
-                    ch = 10
                 events.append(NoteEvent(
-                    time=t,
+                    time=float(times[i]),
                     duration=note_duration,
                     pitch=p,
                     velocity=velocity,
