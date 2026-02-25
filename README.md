@@ -1,4 +1,4 @@
-# Ublind 🎵 - Let your data speak for itself! -
+# Ublind 🎵 - Let your data *speak* for itself! -
 
 **What does your data sound like?**
 
