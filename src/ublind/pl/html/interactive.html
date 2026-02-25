@@ -1,0 +1,312 @@
+<div id="ublind-interactive" style="display:inline-block; position:relative;">
+  <canvas id="ublind-canvas" width="{{WIDTH}}" height="{{HEIGHT}}"
+    style="border:1px solid #ccc; cursor:crosshair;"></canvas>
+  <div id="ublind-info" style="
+    position:absolute; top:10px; right:10px; background:rgba(255,255,255,0.92);
+    padding:8px 12px; border-radius:6px; font:13px monospace; color:#000;
+    display:none; box-shadow:0 2px 8px rgba(0,0,0,0.15);
+  "></div>
+  <div style="text-align:center; margin-top:6px; font:12px sans-serif; color:#888;">
+    Click cluster to hear chord · Hover for notes · Scroll to zoom · Drag to pan · Double-click to reset
+  </div>
+</div>
+
+<script>
+(function() {
+  const points = {{POINTS}};
+  const clusters = {{CLUSTERS}};
+  const palette = {{PALETTE}};
+  const names = {{NAMES}};
+  const invertY = {{INVERT_Y}};
+
+  const canvas = document.getElementById('ublind-canvas');
+  const ctx = canvas.getContext('2d');
+  const info = document.getElementById('ublind-info');
+  const W = canvas.width, H = canvas.height;
+  const pad = 50;
+
+  // Audio
+  let audioCtx = null;
+  function getAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  // Data bounds
+  const xs = points.map(p => p.x);
+  const ys = points.map(p => p.y);
+  const xMin0 = Math.min(...xs), xMax0 = Math.max(...xs);
+  const yMin0 = Math.min(...ys), yMax0 = Math.max(...ys);
+
+  // Zoom/pan state
+  let zoom = 1.0;
+  let panX = 0, panY = 0;
+  let isDragging = false;
+  let dragStartX, dragStartY, panStartX, panStartY;
+
+  function toCanvas(px, py) {
+    const xSpan = (xMax0 - xMin0) / zoom || 1;
+    const ySpan = (yMax0 - yMin0) / zoom || 1;
+    const cx = (xMin0 + xMax0) / 2 + panX;
+    const cy = (yMin0 + yMax0) / 2 + panY;
+    const canvasX = pad + (px - (cx - xSpan/2)) / xSpan * (W - 2*pad);
+    const normalY = (py - (cy - ySpan/2)) / ySpan * (H - 2*pad);
+    const canvasY = invertY ? pad + normalY : (H - pad) - normalY;
+    return [canvasX, canvasY];
+  }
+
+  function toData(canvasX, canvasY) {
+    const xSpan = (xMax0 - xMin0) / zoom || 1;
+    const ySpan = (yMax0 - yMin0) / zoom || 1;
+    const cx = (xMin0 + xMax0) / 2 + panX;
+    const cy = (yMin0 + yMax0) / 2 + panY;
+    const dataX = (canvasX - pad) / (W - 2*pad) * xSpan + (cx - xSpan/2);
+    const normalY = invertY
+      ? (canvasY - pad) / (H - 2*pad)
+      : ((H - pad) - canvasY) / (H - 2*pad);
+    const dataY = normalY * ySpan + (cy - ySpan/2);
+    return [dataX, dataY];
+  }
+
+  // Draw
+  let highlightCluster = undefined;
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    const ps = Math.max(1, {{POINT_SIZE}} * Math.sqrt(zoom));
+
+    for (const p of points) {
+      const [cx, cy] = toCanvas(p.x, p.y);
+      if (cx < -10 || cx > W+10 || cy < -10 || cy > H+10) continue;
+      const alpha = (highlightCluster !== undefined && p.c !== highlightCluster) ? 0.1 : 0.6;
+      ctx.beginPath();
+      ctx.arc(cx, cy, ps, 0, Math.PI * 2);
+      ctx.fillStyle = palette[p.c % palette.length] + (alpha < 0.5 ? '1a' : '99');
+      ctx.fill();
+    }
+
+    // Cluster labels
+    const fontSize = Math.max(9, Math.min(14, 11 * Math.sqrt(zoom)));
+    ctx.font = 'bold ' + fontSize + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const cl of clusters) {
+      const [cx, cy] = toCanvas(cl.cx, cl.cy);
+      if (cx < -50 || cx > W+50 || cy < -20 || cy > H+20) continue;
+      const m = ctx.measureText(cl.name);
+      const bh = fontSize + 4;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillRect(cx - m.width/2 - 4, cy - bh/2, m.width + 8, bh);
+      ctx.strokeStyle = cl.color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - m.width/2 - 4, cy - bh/2, m.width + 8, bh);
+      ctx.fillStyle = '#333';
+      ctx.fillText(cl.name, cx, cy);
+    }
+
+    // Axes
+    ctx.fillStyle = '#888';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('{{EMB_KEY}} ' + ({{D0}}+1), W/2, H - 8);
+    ctx.save();
+    ctx.translate(12, H/2);
+    ctx.rotate(-Math.PI/2);
+    ctx.fillText('{{EMB_KEY}} ' + ({{D1}}+1), 0, 0);
+    ctx.restore();
+
+    // Zoom indicator
+    if (zoom !== 1.0) {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.font = '11px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(zoom.toFixed(1) + 'x', 8, 16);
+    }
+  }
+
+  draw();
+
+  // ── Zoom (scroll wheel) ──
+  canvas.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const [dataX, dataY] = toData(mx, my);
+    const factor = e.deltaY < 0 ? 1.03 : 1/1.03;
+    const newZoom = Math.max(0.5, Math.min(50, zoom * factor));
+
+    zoom = newZoom;
+    const [newMx, newMy] = toCanvas(dataX, dataY);
+    const xSpan = (xMax0 - xMin0) / zoom || 1;
+    const ySpan = (yMax0 - yMin0) / zoom || 1;
+    panX += (mx - newMx) / (W - 2*pad) * xSpan;
+    panY += invertY
+      ? (my - newMy) / (H - 2*pad) * ySpan
+      : -(my - newMy) / (H - 2*pad) * ySpan;
+
+    draw();
+  }, {passive: false});
+
+  // ── Pan (drag) ──
+  canvas.addEventListener('mousedown', function(e) {
+    if (e.button === 0) {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      panStartX = panX;
+      panStartY = panY;
+      canvas.style.cursor = 'grabbing';
+    }
+  });
+
+  canvas.addEventListener('mousemove', function(e) {
+    if (isDragging) {
+      const dx = e.clientX - dragStartX;
+      const dy = e.clientY - dragStartY;
+      const xSpan = (xMax0 - xMin0) / zoom || 1;
+      const ySpan = (yMax0 - yMin0) / zoom || 1;
+      panX = panStartX - dx / (W - 2*pad) * xSpan;
+      panY = invertY
+        ? panStartY - dy / (H - 2*pad) * ySpan
+        : panStartY + dy / (H - 2*pad) * ySpan;
+      draw();
+      return;
+    }
+
+    // Hover: play note
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const pi = findPoint(mx, my);
+    if (pi !== null && pi !== lastHover) {
+      lastHover = pi;
+      const p = points[pi];
+      playNote(p.p0, 0, 0.3, 0.08);
+      canvas.style.cursor = 'pointer';
+    } else if (pi === null) {
+      lastHover = -1;
+      if (!isDragging) canvas.style.cursor = 'crosshair';
+    }
+  });
+
+  canvas.addEventListener('mouseup', function(e) {
+    if (isDragging) {
+      isDragging = false;
+      canvas.style.cursor = 'crosshair';
+    }
+  });
+
+  canvas.addEventListener('mouseleave', function() {
+    isDragging = false;
+  });
+
+  // Double-click to reset
+  canvas.addEventListener('dblclick', function(e) {
+    e.preventDefault();
+    zoom = 1.0; panX = 0; panY = 0;
+    highlightCluster = undefined;
+    info.style.display = 'none';
+    draw();
+  });
+
+  // ── Click → play cluster chord ──
+  canvas.addEventListener('click', function(e) {
+    if (Math.abs(e.clientX - dragStartX) > 5 || Math.abs(e.clientY - dragStartY) > 5) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    const ci = findCluster(mx, my);
+    if (ci !== null) {
+      const cl = clusters[ci];
+      highlightCluster = names.indexOf(cl.name);
+      draw();
+      info.style.display = 'block';
+      // Build key/octave summary
+      let noteDisplay = '';
+      if (cl.note_names && cl.note_names.length > 0) {
+        const keys = [...new Set(cl.note_names.map(n => n.replace(/[0-9-]/g, '')))];
+        const octaves = cl.note_names.map(n => parseInt(n.match(/-?[0-9]+/)?.[0] || '0'));
+        const minOct = Math.min(...octaves);
+        const maxOct = Math.max(...octaves);
+        const octRange = minOct === maxOct ? 'octave ' + minOct : 'octaves ' + minOct + '–' + maxOct;
+        noteDisplay = '<span style="color:#555; font-size:12px">Keys: <b>' + keys.join(' ') +
+          '</b></span><br><span style="color:#555; font-size:11px">' + octRange +
+          ' · ' + cl.notes.length + ' notes</span>';
+      } else {
+        noteDisplay = '<span style="color:#555">' + cl.notes.length + ' notes</span>';
+      }
+      info.innerHTML = '<b style="color:#000; font-size:14px">' + cl.name + '</b><br>' +
+        '<span style="color:#333">' + cl.n_cells + ' cells</span><br>' + noteDisplay;
+      playChord(cl.notes);
+
+      // Keep highlight visible for at least 4s or chord duration
+      const chordMs = cl.notes.length * 80 + 1500;
+      const displayMs = Math.max(4000, chordMs);
+      setTimeout(() => { highlightCluster = undefined; draw(); info.style.display = 'none'; },
+        displayMs);
+    }
+  });
+
+  // ── Audio helpers ──
+  function midiToFreq(note) {
+    return 440 * Math.pow(2, (note - 69) / 12);
+  }
+
+  function playNote(midi, delay, duration, gain) {
+    const ac = getAudio();
+    const osc = ac.createOscillator();
+    const env = ac.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = midiToFreq(midi);
+    const osc2 = ac.createOscillator();
+    const env2 = ac.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.value = midiToFreq(midi) * 2.01;
+
+    const t = ac.currentTime + delay;
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(gain, t + 0.02);
+    env.gain.linearRampToValueAtTime(gain * 0.6, t + 0.1);
+    env.gain.linearRampToValueAtTime(0, t + duration);
+    env2.gain.setValueAtTime(0, t);
+    env2.gain.linearRampToValueAtTime(gain * 0.2, t + 0.02);
+    env2.gain.linearRampToValueAtTime(0, t + duration);
+
+    osc.connect(env).connect(ac.destination);
+    osc2.connect(env2).connect(ac.destination);
+    osc.start(t); osc.stop(t + duration + 0.1);
+    osc2.start(t); osc2.stop(t + duration + 0.1);
+  }
+
+  function playChord(notes) {
+    const spacing = 0.08;
+    const duration = 1.5;
+    const gain = 0.15;
+    notes.forEach((n, i) => playNote(n, i * spacing, duration, gain));
+  }
+
+  function findCluster(mx, my) {
+    let best = null, bestDist = Infinity;
+    for (let i = 0; i < clusters.length; i++) {
+      const [cx, cy] = toCanvas(clusters[i].cx, clusters[i].cy);
+      const d = Math.sqrt((mx-cx)**2 + (my-cy)**2);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+
+  let lastHover = -1;
+  function findPoint(mx, my) {
+    let best = null, bestDist = Infinity;
+    const threshold = Math.max(10, 20 / Math.sqrt(zoom));
+    for (let i = 0; i < points.length; i++) {
+      const [cx, cy] = toCanvas(points[i].x, points[i].y);
+      const d = Math.sqrt((mx-cx)**2 + (my-cy)**2);
+      if (d < bestDist && d < threshold) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+})();
+</script>

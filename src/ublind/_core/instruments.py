@@ -53,7 +53,7 @@ _ALIASES = {
     "piano": 0, "guitar": 25, "bass": 33, "violin": 40,
     "viola": 41, "cello": 42, "harp": 46, "trumpet": 56,
     "trombone": 57, "horn": 60, "sax": 66, "clarinet": 71,
-    "flute": 73, "strings": 40,
+    "flute": 73, "vibraphone": 11, "strings": 40,
 }
 _NAME_TO_PROGRAM.update(_ALIASES)
 

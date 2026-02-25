@@ -22,3 +22,6 @@ dev = ["pytest>=7", "ruff>=0.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+ublind = ["pl/html/*.html"]

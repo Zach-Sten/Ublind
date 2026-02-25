@@ -13,8 +13,8 @@ multi-instrument music.
 
 from __future__ import annotations
 
-from ublind import pp, pl, tl
+from ublind import pp, pl, tl, hlp
 from ublind._core.instruments import GENERAL_MIDI_INSTRUMENTS
 
 __version__ = "0.1.0"
-__all__ = ["pp", "pl", "tl", "GENERAL_MIDI_INSTRUMENTS"]
+__all__ = ["pp", "pl", "tl", "hlp", "GENERAL_MIDI_INSTRUMENTS"]
