@@ -116,12 +116,16 @@ def interactive(
             notes = sorted([int(x) for x in rng.choice(notes, n_chord_notes, replace=False)])
         notes = sorted(notes)
 
+        # Compute key/octave summary for display
+        note_names = _midi_to_note_names(notes)
+
         cluster_data.append({
             "name": name,
             "color": palette[i % len(palette)],
             "cx": float(x[mask].mean()),
             "cy": float(y[mask].mean()),
             "notes": notes,
+            "note_names": note_names,
             "n_cells": int(mask.sum()),
         })
 
@@ -142,6 +146,17 @@ def interactive(
     )
 
     return HTML(html)
+
+
+def _midi_to_note_names(midi_notes):
+    """Convert list of MIDI notes to compact note name summary."""
+    NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    names = []
+    for m in midi_notes:
+        note = NOTE_NAMES[m % 12]
+        octave = (m // 12) - 1
+        names.append(f"{note}{octave}")
+    return names
 
 
 def _build_html(points_js, clusters_js, palette_js, names_js,
@@ -280,7 +295,7 @@ def _build_html(points_js, clusters_js, palette_js, names_js,
 
     // Zoom toward mouse position
     const [dataX, dataY] = toData(mx, my);
-    const factor = e.deltaY < 0 ? 1.15 : 1/1.15;
+    const factor = e.deltaY < 0 ? 1.03 : 1/1.03;
     const newZoom = Math.max(0.5, Math.min(50, zoom * factor));
 
     // Adjust pan so the point under cursor stays put
@@ -374,12 +389,30 @@ def _build_html(points_js, clusters_js, palette_js, names_js,
       highlightCluster = names.indexOf(cl.name);
       draw();
       info.style.display = 'block';
-      info.innerHTML = '<b style="color:#000">' + cl.name + '</b><br>' +
-        '<span style="color:#333">' + cl.n_cells + ' cells · ' + cl.notes.length + ' notes</span>';
+      // Build key/octave summary
+      let noteDisplay = '';
+      if (cl.note_names && cl.note_names.length > 0) {{
+        // Get unique keys and octave range
+        const keys = [...new Set(cl.note_names.map(n => n.replace(/[0-9-]/g, '')))];
+        const octaves = cl.note_names.map(n => parseInt(n.match(/-?[0-9]+/)?.[0] || '0'));
+        const minOct = Math.min(...octaves);
+        const maxOct = Math.max(...octaves);
+        const octRange = minOct === maxOct ? 'octave ' + minOct : 'octaves ' + minOct + '–' + maxOct;
+        noteDisplay = '<span style="color:#555; font-size:12px">Keys: <b>' + keys.join(' ') +
+          '</b></span><br><span style="color:#555; font-size:11px">' + octRange +
+          ' · ' + cl.notes.length + ' notes</span>';
+      }} else {{
+        noteDisplay = '<span style="color:#555">' + cl.notes.length + ' notes</span>';
+      }}
+      info.innerHTML = '<b style="color:#000; font-size:14px">' + cl.name + '</b><br>' +
+        '<span style="color:#333">' + cl.n_cells + ' cells</span><br>' + noteDisplay;
       playChord(cl.notes);
 
+      // Keep highlight visible for at least 4s or chord duration
+      const chordMs = cl.notes.length * 80 + 1500;
+      const displayMs = Math.max(4000, chordMs);
       setTimeout(() => {{ highlightCluster = undefined; draw(); info.style.display = 'none'; }},
-        cl.notes.length * 80 + 1800);
+        displayMs);
     }}
   }});
 
