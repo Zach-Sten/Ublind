@@ -13,6 +13,10 @@
 **/*.rds
 **/*.Rds
 **/*.RData
+__pycache__/
+*.pyc
+*.wav
+*.h5ad
 .Rproj.user/*
 .Rhistory
 .Rproj.user
