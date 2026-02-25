@@ -1,6 +1,84 @@
-# Ublind
-Ublind is the first package to adress an accessibility gap in single-cell data analysis. UMAP, PCA, and tSNE embeddings are widely used to visualize high-dimensional single-cell data, but these visualizations are inherently inaccessible to visually impaired researchers. 
+# ublind 🎵
 
-This repo explores an alternative approach to interacting with high dimensional data by translating high dimensional coordinates into sound, enabling researchers to hear their features rather than seeing them. 
+**What does your data sound like?**
 
-Stay tuned for updates! 
+ublind turns single-cell embeddings into music. Pick an embedding — UMAP, PCA, t-SNE, whatever, and ublind maps it to sound. The first dimension becomes **time**, the rest become **pitch**, each on its own instrument. Clusters become chords, trajectories become melodies, outliers become surprises.
+
+Built for AnnData. Sometimes you can *hear* structure in data that you can't see. 
+
+> ⚠️ **Beta** — early development, expect rough edges. Feedback welcome.
+
+
+## Install
+
+Requires Python ≥ 3.10 and ffmpeg for animated visualizations.
+
+```bash
+# ffmpeg (needed for sweep animations)
+conda install -c conda-forge ffmpeg
+
+# install ublind
+cd ublind
+pip install -e .
+```
+
+For realistic instrument sounds via SoundFont rendering (optional):
+
+```bash
+conda install -c conda-forge fluidsynth
+pip install pyfluidsynth
+```
+
+## Quick start
+
+```python
+import scanpy as sc
+import ublind as ub
+
+adata = sc.read_h5ad("my_data.h5ad")
+
+# embedding → music
+ub.pp.preprocess(adata, embedding="X_umap", time=10, scale="pentatonic")
+
+# render audio
+ub.tl.render(adata, "output.wav")
+
+# animated sweep with sound
+ub.pl.sweep(adata)
+```
+
+### Pick your instruments
+
+```python
+ub.pp.preprocess(
+    adata,
+    embedding="X_pca",
+    time=15,
+    dim_inst_map={0: "piano", 1: "cello", 2: "flute"},
+    scale="minor",
+    subsample=3000,
+)
+```
+
+### Available scales
+
+`pentatonic` · `major` · `minor` · `blues` · `dorian` · `mixolydian` · `whole_tone` · `chromatic`
+
+### Available instruments
+
+`piano` · `cello` · `violin` · `flute` · `guitar` · `harp` · `trumpet` · `sax` · `clarinet` · `vibraphone` — or any General MIDI program number.
+
+## How it works
+
+```
+adata.obsm["X_umap"]          ub.pp.preprocess()         ub.tl.render()
+┌─────────────────┐          ┌──────────────────┐       ┌─────────────┐
+│ dim 0 → time    │          │                  │       │             │
+│ dim 1 → piano   │────────▶ │  NoteEvents      │─────▶ │  .wav/.mid  │
+│ dim 2 → cello   │          │  [t, pitch, vel]  │       │             │
+└─────────────────┘          └──────────────────┘       └─────────────┘
+```
+
+## Author
+
+Zachary Stensland — UCSF
