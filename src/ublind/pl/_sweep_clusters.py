@@ -29,7 +29,7 @@ def sweep_clusters(
     Animated cluster-by-cluster playback.
 
     Each cluster lights up in sequence as its audio plays.
-    Requires ``ub.pp.preprocess_clusters()`` to have been run.
+    Requires ``ub.pp.compose_clusters()`` to have been run.
 
     Parameters
     ----------
@@ -47,7 +47,7 @@ def sweep_clusters(
 
     if ub.get("mode") != "clusters":
         raise RuntimeError(
-            "Run ub.pp.preprocess_clusters() first (not ub.pp.preprocess)."
+            "Run ub.pp.compose_clusters() first (not ub.pp.preprocess)."
         )
 
     coords = ub["coords"]

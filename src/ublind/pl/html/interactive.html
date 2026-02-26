@@ -18,6 +18,7 @@
   const palette = {{PALETTE}};
   const names = {{NAMES}};
   const invertY = {{INVERT_Y}};
+  const playAxis = {{PLAY_AXIS}};
 
   const canvas = document.getElementById('ublind-canvas');
   const ctx = canvas.getContext('2d');
@@ -174,7 +175,7 @@
       return;
     }
 
-    // Hover: play note
+    // Hover: play note(s)
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -182,7 +183,15 @@
     if (pi !== null && pi !== lastHover) {
       lastHover = pi;
       const p = points[pi];
-      playNote(p.p0, 0, 0.3, 0.08);
+      const ac = getAudio();
+      const now = ac.currentTime;
+      const dur = 0.35;
+      if (playAxis === 'x' || playAxis === 'both') {
+        _playTone(ac, midiToFreq(p.p0), now, dur, 0.10);
+      }
+      if (playAxis === 'y' || playAxis === 'both') {
+        _playTone(ac, midiToFreq(p.p1), now + 0.02, dur, 0.08);
+      }
       canvas.style.cursor = 'pointer';
     } else if (pi === null) {
       lastHover = -1;
@@ -252,6 +261,21 @@
   // ── Audio helpers ──
   function midiToFreq(note) {
     return 440 * Math.pow(2, (note - 69) / 12);
+  }
+
+  // Lightweight tone player for hover — creates minimal nodes
+  function _playTone(ac, freq, startTime, duration, gain) {
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = 'triangle';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.001, startTime);
+    g.gain.linearRampToValueAtTime(gain, startTime + 0.015);
+    g.gain.linearRampToValueAtTime(gain * 0.5, startTime + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    o.connect(g).connect(ac.destination);
+    o.start(startTime);
+    o.stop(startTime + duration + 0.05);
   }
 
   function playNote(midi, delay, duration, gain) {

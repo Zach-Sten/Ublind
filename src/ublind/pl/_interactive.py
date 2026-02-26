@@ -18,7 +18,9 @@ def interactive(
     color_by: str = "leiden",
     embedding: Optional[str] = None,
     dims: tuple[int, int] = (0, 1),
-    invert_y: bool = False,
+    invert_y: bool = True,
+    play_axis: str = "both",
+    counterpoint: bool = True,
     scale: str = "pentatonic",
     root: int = 0,
     n_chord_notes: int = 12,
@@ -36,7 +38,7 @@ def interactive(
     Parameters
     ----------
     adata : AnnData
-        Must have been preprocessed with ``ub.pp.preprocess()``.
+        Must have been preprocessed with ``ub.pp.compose()``.
     color_by : str
         Categorical column in ``adata.obs`` for cluster identity.
     embedding : str, optional
@@ -47,6 +49,10 @@ def interactive(
     invert_y : bool
         Flip Y axis. Default True (correct for spatial/imaging data).
         Set False for UMAP/PCA where low-Y should be at bottom.
+    play_axis : str
+        Which axis notes to play on hover: ``"x"``, ``"y"``, or
+        ``"both"`` (default). ``"both"`` plays the note from each
+        axis simultaneously for a richer sound.
     scale : str
         Scale for pitch mapping.
     root : int
@@ -114,8 +120,19 @@ def interactive(
         ]
 
     # Compute pitches for both dims
+    from ublind._core.notes import LOWEST_NOTE, HIGHEST_NOTE
+
     pitches_d0 = map_to_pitches(x, scale=scale, root=root)
     pitches_d1 = map_to_pitches(y, scale=scale, root=root)
+
+    # Counterpoint: flip dim 1 pitch direction
+    if counterpoint:
+        pitches_d1 = (LOWEST_NOTE + HIGHEST_NOTE) - pitches_d1
+        if scale is not None:
+            pitches_d1 = map_to_pitches(
+                pitches_d1.astype(float), lo=LOWEST_NOTE, hi=HIGHEST_NOTE,
+                scale=scale, root=root,
+            )
 
     # Build per-cluster chord data
     cluster_data = []
@@ -173,6 +190,7 @@ def interactive(
     html = html.replace("{{EMB_KEY}}", emb_key)
     html = html.replace("{{D0}}", str(d0))
     html = html.replace("{{D1}}", str(d1))
+    html = html.replace("{{PLAY_AXIS}}", f'"{play_axis}"')
 
     return HTML(html)
 

@@ -19,7 +19,7 @@ from ublind._core.instruments import (
 )
 
 
-def preprocess_clusters(
+def compose_clusters(
     adata,
     *,
     embedding: str = "X_umap",

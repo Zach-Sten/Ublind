@@ -20,7 +20,7 @@ from ublind._core.instruments import (
 )
 
 
-def preprocess(
+def compose(
     adata,
     *,
     embedding: str = "X_umap",

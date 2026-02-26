@@ -1,12 +1,12 @@
 """
 Spatial sweep — replay cluster sounds triggered by tissue position.
 
-Uses the cluster chords defined by preprocess_clusters(), but
+Uses the cluster chords defined by compose_clusters(), but
 triggers them based on when the sweep line passes each cell's
 physical location in the tissue.
 
 Requires:
-1. ub.pp.preprocess_clusters() to define the sounds
+1. ub.pp.compose_clusters() to define the sounds
 2. adata.obsm['spatial'] (or other spatial key) for coordinates
 """
 
@@ -46,7 +46,7 @@ def sweep_spatial(
     Sweep across tissue space, playing cluster sounds as the line
     passes each cell.
 
-    Must call ``ub.pp.preprocess_clusters()`` first to define what
+    Must call ``ub.pp.compose_clusters()`` first to define what
     each cluster sounds like. This function re-renders the audio
     with spatial timing and creates a video of the sweep across
     real tissue coordinates.
@@ -61,7 +61,7 @@ def sweep_spatial(
         ``"x"`` (left→right), ``"y"`` (bottom→top), or ``"both"``.
     color_by : str, optional
         Column in ``adata.obs`` to color by. Defaults to the
-        cluster_key used in preprocess_clusters.
+        cluster_key used in compose_clusters.
     legend_loc : str
         ``"on data"``, ``"right margin"``, or ``"none"``.
     subsample : int, optional
@@ -83,7 +83,7 @@ def sweep_spatial(
 
     if ub.get("mode") != "clusters":
         raise RuntimeError(
-            "Run ub.pp.preprocess_clusters() first to define cluster sounds."
+            "Run ub.pp.compose_clusters() first to define cluster sounds."
         )
 
     if spatial_key not in adata.obsm:
@@ -108,7 +108,7 @@ def sweep_spatial(
     if spatial_coords.ndim == 2 and spatial_coords.shape[1] > 2:
         spatial_coords = spatial_coords[:, :2]
 
-    # Match to preprocess_clusters subsample if it exists
+    # Match to compose_clusters subsample if it exists
     subsample_idx = ub.get("subsample_idx")
     if subsample_idx is not None:
         spatial_coords = spatial_coords[subsample_idx]
