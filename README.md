@@ -49,7 +49,7 @@ ub.hlp.scales()
 ub.hlp.quickstart()
 
 # embedding → music
-ub.pp.preprocess(adata, embedding="X_umap", time=10, scale="pentatonic")
+ub.pp.compose(adata, embedding="X_umap", time=10, scale="pentatonic")
 
 # render audio
 ub.tl.render(adata, "output.wav")
@@ -64,7 +64,7 @@ ub.pl.interactive(adata, color_by="cell_type", embedding = 'X_umap')
 ### Pick your instruments
 
 ```python
-ub.pp.preprocess(
+ub.pp.compose(
     adata,
     embedding="X_pca",
     time=15,
